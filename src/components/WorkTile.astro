@@ -1,0 +1,184 @@
+---
+import type { Media } from "../data/cases";
+
+interface Props {
+  id?: string;
+  title?: string;
+  subtitle?: string;
+  roles?: string;
+  copy?: string;
+  media: Media;
+  href: string;
+  type?: "video" | "series";
+  lightboxable?: boolean;
+  vertical?: boolean;
+  ariaLabel?: string;
+  className?: string;
+  target?: HTMLAnchorElement["target"];
+  deferMedia?: boolean;
+}
+
+const {
+  id,
+  title,
+  subtitle,
+  roles,
+  copy,
+  media,
+  href,
+  type = "video",
+  lightboxable,
+  vertical = false,
+  ariaLabel,
+  className = "",
+  target,
+  deferMedia = false,
+} = Astro.props;
+
+const isExternal = /^https?:\/\//i.test(href);
+const resolvedLightboxable = lightboxable ?? (type === "video" && isExternal);
+const resolvedTarget = target ?? (isExternal ? "_blank" : undefined);
+const resolvedRel =
+  resolvedTarget === "_blank" ? "noopener noreferrer" : undefined;
+const displayTitle = title?.trim() || undefined;
+const displaySubtitle = subtitle?.trim() || undefined;
+const displayRoles = roles?.trim() || undefined;
+const displayCopy = copy?.trim() || undefined;
+const defaultAriaLabelBase =
+  displayTitle || displaySubtitle || id || "Work item";
+---
+
+<a
+  class={`tile ${className}`.trim()}
+  href={href}
+  aria-label={ariaLabel ?? `${defaultAriaLabelBase} details`}
+  target={resolvedTarget}
+  rel={resolvedRel}
+  data-id={id}
+  data-title={displayTitle}
+  data-subtitle={displaySubtitle}
+  data-roles={displayRoles}
+  data-copy={displayCopy}
+  data-type={type}
+  data-lightboxable={resolvedLightboxable ? "true" : undefined}
+  data-vertical={vertical ? "true" : undefined}
+>
+  {
+    media.kind === "image" && (
+      <img
+        class="media"
+        src={deferMedia ? undefined : media.src}
+        data-src={deferMedia ? media.src : undefined}
+        alt={media.alt}
+        loading="lazy"
+      />
+    )
+  }
+  {
+    media.kind === "video" && (
+      <video
+        class="media"
+        data-src={media.src}
+        autoplay
+        loop
+        muted
+        playsinline
+        poster={media.poster}
+        preload="none"
+      />
+    )
+  }
+
+  <div class="overlay">
+    {displayTitle && <div class="titleText">{displayTitle}</div>}
+    {displaySubtitle && <div class="subtitleText">{displaySubtitle}</div>}
+    {displayRoles && <div class="roles">{displayRoles}</div>}
+
+    {
+      displayCopy && (
+        <>
+          <hr class="w-1/2" />
+          <div class="thumbCopy">{displayCopy}</div>
+        </>
+      )
+    }
+  </div>
+</a>
+
+<style>
+
+  .media {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: .25em;
+    color: white;
+    text-align: center;
+    padding: 1rem;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(0, 0, 0, 1), rgba(0, 0, 0, 0.5));
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .tile:hover .overlay,
+  .tile:focus-within .overlay,
+  .tile:focus-visible .overlay {
+    opacity: 1;
+  }
+
+  .titleText {
+    font-weight: 600;
+    font-size: 3rem;
+    line-height: 1;
+  }
+
+  .subtitleText {
+    font-weight: 600;
+  }
+
+  .titleText {
+    transform: translateY(-10px);
+  }
+
+  .roles,
+  .subtitleText,
+  .thumbCopy {
+    transform: translateY(10px);
+  }
+
+  .titleText,
+  .roles,
+  .subtitleText,
+  .thumbCopy {
+    opacity: 0;
+    transition:
+      opacity 200ms ease,
+      transform 200ms ease;
+  }
+
+  .tile:hover .titleText,
+  .tile:hover .roles,
+  .tile:hover .subtitleText,
+  .tile:hover .thumbCopy,
+  .tile:focus-within .roles,
+  .tile:focus-within .subtitleText,
+  .tile:focus-within .thumbCopy,
+  .tile:focus-visible .roles,
+  .tile:focus-visible .subtitleText,
+  .tile:focus-visible .thumbCopy {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>

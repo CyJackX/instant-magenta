@@ -142,6 +142,7 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+dist-clean
 
 # Gatsby files
 .cache/
@@ -200,3 +201,5 @@ dist
 
 ### Astro ###
 .astro/
+
+offline assets

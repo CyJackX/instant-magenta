@@ -1,0 +1,47 @@
+---
+import WorkTile from "./WorkTile.astro";
+import { getWorkTileDataById } from "../lib/work";
+
+interface Props {
+  id: string;
+  href?: string;
+  lightboxable?: boolean;
+  ariaLabel?: string;
+  className?: string;
+  target?: HTMLAnchorElement["target"];
+  deferMedia?: boolean;
+}
+
+const {
+  id,
+  href: hrefOverride,
+  lightboxable,
+  ariaLabel,
+  className,
+  target,
+  deferMedia,
+} = Astro.props;
+
+const tile = getWorkTileDataById(id, hrefOverride);
+
+if (!tile) {
+  throw new Error(`WorkTileByID: unknown video id "${id}".`);
+}
+---
+
+<WorkTile
+  id={tile.id}
+  type={tile.type}
+  title={tile.title}
+  subtitle={tile.subtitle}
+  roles={tile.roles}
+  copy={tile.copy}
+  media={tile.media}
+  href={tile.href}
+  vertical={tile.vertical === true}
+  lightboxable={lightboxable}
+  ariaLabel={ariaLabel}
+  className={className}
+  target={target}
+  deferMedia={deferMedia}
+/>

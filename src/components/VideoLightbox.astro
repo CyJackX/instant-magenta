@@ -1,0 +1,991 @@
+---
+interface Props {
+  tileSelector?: string;
+}
+
+const { tileSelector = ".tile[data-lightboxable='true']" } = Astro.props;
+---
+
+<div
+  id="videoLightbox"
+  class="lightbox"
+  data-tile-selector={tileSelector}
+  hidden
+>
+  <div class="lightboxBackdrop" data-close-lightbox></div>
+  <div class="lightboxPanel" role="dialog" aria-modal="true" aria-label="Video player">
+    <button class="lightboxClose" type="button" data-close-lightbox aria-label="Close video">
+      <span class="srOnly">Close</span>
+    </button>
+    <div id="lightboxContent"></div>
+    <div id="lightboxDetails" class="lightboxDetails" hidden></div>
+  </div>
+</div>
+
+<template id="youtubeBlockedTemplate">
+  <div class="lightboxMedia lightboxErrorCard">
+    <p class="lightboxErrorText">
+      This video cannot be embedded due to YouTube content restrictions.
+    </p>
+    <a
+      class="lightboxErrorLink"
+      data-youtube-fallback-link
+      href="#"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+    <img src="/youtube.png" width="60px" class="m-auto">
+      Click here to watch directly in the YouTube app.
+    </a>
+  </div>
+</template>
+
+<script type="module">
+  const lightbox = document.getElementById("videoLightbox");
+  const selector =
+    lightbox?.getAttribute("data-tile-selector") ||
+    ".tile[data-lightboxable='true']";
+  const tiles = Array.from(document.querySelectorAll(selector));
+  const lightboxContent = document.getElementById("lightboxContent");
+  const lightboxDetails = document.getElementById("lightboxDetails");
+  const youtubeBlockedTemplate = document.getElementById("youtubeBlockedTemplate");
+  const lightboxPanel = lightbox?.querySelector(".lightboxPanel");
+  const lightboxBackdrop = lightbox?.querySelector(".lightboxBackdrop");
+  const lightboxClose = lightbox?.querySelector(".lightboxClose");
+  const OPEN_DURATION_MS = 500;
+  const CLOSE_DURATION_MS = 250;
+  const IMAGE_FADE_DURATION_MS = 180;
+  const EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+  const PANEL_ANIM_EASING = "ease-out";
+  const DEBUG_LIGHTBOX =
+    new URLSearchParams(window.location.search).has("debugLightbox") ||
+    window.localStorage.getItem("debugLightbox") === "1";
+  let lastActiveElement = null;
+  let activeTile = null;
+  let isAnimating = false;
+  let youtubeApiPromise = null;
+  let activeYoutubePlayer = null;
+
+  function isRectRenderable(rect) {
+    return Boolean(rect && rect.width > 0 && rect.height > 0);
+  }
+
+  function rectSummary(rect) {
+    if (!rect) return null;
+    return {
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  }
+
+  function debugLog(message, payload) {
+    if (!DEBUG_LIGHTBOX) return;
+    if (payload !== undefined) {
+      console.log("[VideoLightbox]", message, payload);
+      return;
+    }
+    console.log("[VideoLightbox]", message);
+  }
+
+  function createTileClone(tile, rect) {
+    const clone = tile.cloneNode(true);
+    clone.removeAttribute("href");
+    clone.classList.remove("lightboxSourceTileFading");
+    clone.classList.add("lightboxClone");
+    clone.style.position = "fixed";
+    clone.style.margin = "0";
+    clone.style.pointerEvents = "none";
+    clone.style.overflow = "hidden";
+    clone.style.zIndex = "2147483647";
+    clone.style.display = "block";
+    clone.style.visibility = "visible";
+    clone.style.opacity = "1";
+    clone.style.left = `${rect.left}px`;
+    clone.style.top = `${rect.top}px`;
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    clone.style.borderRadius = getComputedStyle(tile).borderRadius || "12px";
+    const sourceVideos = Array.from(tile.querySelectorAll("video"));
+    clone.querySelectorAll("video").forEach((cloneVideo, index) => {
+      const sourceVideo = sourceVideos[index];
+      if (!(cloneVideo instanceof HTMLVideoElement) || !(sourceVideo instanceof HTMLVideoElement)) {
+        return;
+      }
+      cloneVideo.muted = true;
+      cloneVideo.defaultMuted = true;
+      cloneVideo.playsInline = true;
+      cloneVideo.loop = sourceVideo.loop;
+      if (Number.isFinite(sourceVideo.currentTime) && sourceVideo.currentTime > 0) {
+        try {
+          cloneVideo.currentTime = sourceVideo.currentTime;
+        } catch {}
+      }
+      cloneVideo.play().catch(() => {});
+    });
+    document.body.append(clone);
+    if (DEBUG_LIGHTBOX) {
+      clone.style.outline = "3px solid #ff4d00";
+      clone.style.backgroundColor = "rgba(255, 77, 0, 0.12)";
+      clone.style.boxShadow = "0 0 0 2px rgba(255,255,255,0.7) inset";
+    }
+    const cloneRect = clone.getBoundingClientRect();
+    const cloneStyle = getComputedStyle(clone);
+    debugLog("clone: created", {
+      tileId: tile.dataset.id || null,
+      cloneRect: rectSummary(cloneRect),
+      cloneOpacity: cloneStyle.opacity,
+      cloneDisplay: cloneStyle.display,
+      cloneVisibility: cloneStyle.visibility,
+      cloneZIndex: cloneStyle.zIndex,
+      sourceVideoCount: sourceVideos.length,
+      sourceImageCount: tile.querySelectorAll("img").length,
+    });
+    return clone;
+  }
+
+  function nextAnimationFrame() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+
+  function waitForImageReady(image) {
+    if (!(image instanceof HTMLImageElement)) {
+      return Promise.resolve();
+    }
+
+    if (image.complete && image.naturalWidth > 0) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      const finish = () => {
+        image.removeEventListener("load", finish);
+        image.removeEventListener("error", finish);
+        resolve();
+      };
+
+      image.addEventListener("load", finish, { once: true });
+      image.addEventListener("error", finish, { once: true });
+    });
+  }
+
+  function animateCloneBetweenRects(clone, fromRect, toRect, duration, options = {}) {
+    const { fromOpacity = 1, toOpacity = 1 } = options;
+    const dx = toRect.left - fromRect.left;
+    const dy = toRect.top - fromRect.top;
+    const scaleX = toRect.width / fromRect.width;
+    const scaleY = toRect.height / fromRect.height;
+    debugLog("clone: keyframes", {
+      fromRect: rectSummary(fromRect),
+      toRect: rectSummary(toRect),
+      dx: Math.round(dx),
+      dy: Math.round(dy),
+      scaleX: Number(scaleX.toFixed(3)),
+      scaleY: Number(scaleY.toFixed(3)),
+      duration,
+    });
+
+    clone.style.transformOrigin = "top left";
+    const animation = clone.animate(
+      [
+        { transform: "translate(0px, 0px) scale(1, 1)", opacity: fromOpacity },
+        { transform: `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`, opacity: toOpacity },
+      ],
+      { duration, easing: EASING, fill: "forwards" },
+    );
+    if (DEBUG_LIGHTBOX) {
+      const midFlightTimer = window.setTimeout(() => {
+        const style = getComputedStyle(clone);
+        debugLog("clone: mid-flight", {
+          rect: rectSummary(clone.getBoundingClientRect()),
+          transform: style.transform,
+          opacity: style.opacity,
+          visibility: style.visibility,
+          zIndex: style.zIndex,
+        });
+      }, Math.max(32, Math.round(duration / 2)));
+      animation.finished.finally(() => window.clearTimeout(midFlightTimer));
+    }
+    return animation;
+  }
+
+  function getYoutubeId(url) {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const host = parsed.hostname.replace(/^www\./, "");
+      if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+        const shortsMatch = parsed.pathname.match(/^\/shorts\/([^/?#]+)/);
+        if (shortsMatch) {
+          return shortsMatch[1];
+        }
+        const embedMatch = parsed.pathname.match(/^\/embed\/([^/?#]+)/);
+        if (embedMatch) {
+          return embedMatch[1];
+        }
+        return parsed.searchParams.get("v");
+      }
+      if (host === "youtu.be") {
+        return parsed.pathname.replace("/", "");
+      }
+    } catch {}
+    return "";
+  }
+
+function isNativeVideoUrl(url) {
+  return /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(url);
+}
+
+function isImageUrl(url) {
+  return /\.(avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(url);
+}
+
+  function getInstagramEmbed(url) {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "");
+      const isInstagramHost =
+        host === "instagram.com" || host.endsWith(".instagram.com") || host === "instagr.am";
+      if (!isInstagramHost) return null;
+
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      if (segments.length < 2) return null;
+
+      const kind = segments[0];
+      const shortcode = segments[1];
+      if (!shortcode) return null;
+      if (!["p", "reel", "tv"].includes(kind)) return null;
+
+      return {
+        kind,
+        shortcode,
+        isVertical: kind === "reel",
+        embedUrl: `https://www.instagram.com/${kind}/${shortcode}/embed/`,
+      };
+    } catch {}
+    return null;
+  }
+
+  function canBuildPlayer(url) {
+    return (
+      Boolean(getYoutubeId(url)) ||
+      Boolean(getInstagramEmbed(url)) ||
+      isNativeVideoUrl(url) ||
+      isImageUrl(url)
+    );
+  }
+
+  function clearYoutubePlayer() {
+    if (activeYoutubePlayer && typeof activeYoutubePlayer.destroy === "function") {
+      activeYoutubePlayer.destroy();
+    }
+    activeYoutubePlayer = null;
+  }
+
+  function setLightboxDetails(tile) {
+    if (!(lightboxDetails instanceof HTMLElement)) return;
+    if (!(tile instanceof HTMLElement)) {
+      lightboxDetails.replaceChildren();
+      lightboxDetails.hidden = true;
+      return;
+    }
+
+    const title = tile.dataset.title?.trim() || "";
+    const subtitle = tile.dataset.subtitle?.trim() || "";
+    const roles = tile.dataset.roles?.trim() || "";
+    const copy = tile.dataset.copy?.trim() || "";
+
+    if (!title && !subtitle && !roles && !copy) {
+      lightboxDetails.replaceChildren();
+      lightboxDetails.hidden = true;
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    if (title) {
+      const titleEl = document.createElement("h3");
+      titleEl.className = "lightboxTitle";
+      titleEl.textContent = title;
+      fragment.append(titleEl);
+    }
+
+    if (subtitle) {
+      const subtitleEl = document.createElement("p");
+      subtitleEl.className = "lightboxSubtitle";
+      subtitleEl.textContent = subtitle;
+      fragment.append(subtitleEl);
+    }
+
+    if (roles) {
+      const rolesEl = document.createElement("p");
+      rolesEl.className = "lightboxRoles";
+      rolesEl.textContent = roles;
+      fragment.append(rolesEl);
+    }
+
+    if (copy) {
+      const copyEl = document.createElement("p");
+      copyEl.className = "lightboxCopy";
+      copyEl.textContent = copy;
+      fragment.append(copyEl);
+    }
+
+    lightboxDetails.replaceChildren(fragment);
+    lightboxDetails.hidden = false;
+  }
+
+  function renderYoutubeBlockedMessage(sourceUrl, isVertical = false) {
+    if (!lightboxContent) return;
+    clearYoutubePlayer();
+    if (!(youtubeBlockedTemplate instanceof HTMLTemplateElement)) return;
+
+    const fragment = youtubeBlockedTemplate.content.cloneNode(true);
+    if (!(fragment instanceof DocumentFragment)) return;
+
+    const wrapper = fragment.querySelector(".lightboxErrorCard");
+    if (wrapper instanceof HTMLElement) {
+      wrapper.classList.toggle("isVertical", isVertical);
+    }
+
+    const link = fragment.querySelector("[data-youtube-fallback-link]");
+    if (link instanceof HTMLAnchorElement) {
+      link.href = sourceUrl;
+    }
+
+    lightboxContent.replaceChildren(fragment);
+  }
+
+  function loadYoutubeApi() {
+    if (window.YT && typeof window.YT.Player === "function") {
+      return Promise.resolve(window.YT);
+    }
+    if (youtubeApiPromise) {
+      return youtubeApiPromise;
+    }
+
+    youtubeApiPromise = new Promise((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        reject(new Error("YouTube Iframe API timed out."));
+      }, 7000);
+
+      const finishResolve = () => {
+        window.clearTimeout(timeoutId);
+        resolve(window.YT);
+      };
+
+      const previousReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof previousReady === "function") {
+          previousReady();
+        }
+        finishResolve();
+      };
+
+      const existingScript = document.querySelector("script[data-youtube-iframe-api='true']");
+      if (!existingScript) {
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        script.async = true;
+        script.dataset.youtubeIframeApi = "true";
+        script.onerror = () => {
+          window.clearTimeout(timeoutId);
+          reject(new Error("Failed to load YouTube Iframe API."));
+        };
+        document.head.append(script);
+      } else if (window.YT && typeof window.YT.Player === "function") {
+        finishResolve();
+      }
+    }).catch((error) => {
+      youtubeApiPromise = null;
+      throw error;
+    });
+
+    return youtubeApiPromise;
+  }
+
+  async function mountYoutubePlayer(iframeEl, sourceUrl) {
+    try {
+      const YT = await loadYoutubeApi();
+      if (!lightbox || lightbox.hidden || activeTile === null) return;
+      if (!(iframeEl instanceof HTMLIFrameElement)) return;
+      if (!iframeEl.id) {
+        iframeEl.id = `yt-lightbox-${Math.random().toString(36).slice(2, 10)}`;
+      }
+      clearYoutubePlayer();
+      activeYoutubePlayer = new YT.Player(iframeEl.id, {
+        events: {
+          onError: (event) => {
+            const errorCode = Number(event?.data);
+            // 101/150 are "owner disallows embedding", and other codes are unrecoverable here.
+            if ([2, 5, 100, 101, 150].includes(errorCode)) {
+              renderYoutubeBlockedMessage(sourceUrl, iframeEl.classList.contains("isVertical"));
+            }
+          },
+        },
+      });
+    } catch {}
+  }
+
+  function buildPlayer(url, isVertical = false, alt = "Image") {
+    const youtubeId = getYoutubeId(url);
+    if (youtubeId) {
+      const iframe = document.createElement("iframe");
+      iframe.className = "lightboxMedia";
+      if (isVertical) iframe.classList.add("isVertical");
+      iframe.src = `https://www.youtube.com/embed/${youtubeId}?autoplay=1&playsinline=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`;
+      iframe.title = "Video player";
+      iframe.loading = "lazy";
+      iframe.allow =
+        "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+      iframe.referrerPolicy = "strict-origin-when-cross-origin";
+      iframe.allowFullscreen = true;
+      return {
+        kind: "youtube",
+        sourceUrl: url,
+        youtubeId,
+        isVertical,
+        element: iframe,
+      };
+    }
+
+    const instagram = getInstagramEmbed(url);
+    if (instagram) {
+      const iframe = document.createElement("iframe");
+      iframe.className = "lightboxMedia";
+      if (isVertical || instagram.isVertical) iframe.classList.add("isVertical");
+      iframe.src = instagram.embedUrl;
+      iframe.title = "Instagram post";
+      iframe.loading = "lazy";
+      iframe.allow = "autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share";
+      iframe.referrerPolicy = "strict-origin-when-cross-origin";
+      iframe.allowFullscreen = true;
+      return {
+        kind: "instagram",
+        sourceUrl: url,
+        shortcode: instagram.shortcode,
+        isVertical: isVertical || instagram.isVertical,
+        element: iframe,
+      };
+    }
+
+    if (isNativeVideoUrl(url)) {
+      const video = document.createElement("video");
+      video.className = "lightboxMedia";
+      if (isVertical) video.classList.add("isVertical");
+      video.src = url;
+      video.controls = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      return {
+        kind: "native",
+        sourceUrl: url,
+        isVertical,
+        element: video,
+      };
+    }
+
+    if (isImageUrl(url)) {
+      const image = document.createElement("img");
+      image.className = "lightboxMedia lightboxImage";
+      image.src = url;
+      image.alt = alt;
+      image.decoding = "async";
+      return {
+        kind: "image",
+        sourceUrl: url,
+        isVertical: false,
+        element: image,
+      };
+    }
+
+    return null;
+  }
+
+  async function closeLightbox() {
+    if (!lightbox || !lightboxContent || !lightboxPanel || !lightboxBackdrop || lightbox.hidden) {
+      return;
+    }
+    if (isAnimating) return;
+    isAnimating = true;
+    lightbox.classList.add("isAnimating");
+
+    const tile = activeTile;
+    const mediaEl = lightboxContent.querySelector(".lightboxMedia") || lightboxContent;
+    const mediaRect = mediaEl.getBoundingClientRect();
+    const fromRect = mediaRect;
+    const toRect = tile ? tile.getBoundingClientRect() : null;
+    const isImageLightbox = lightboxPanel.classList.contains("isImage");
+    debugLog("close: measured rects", {
+      fromRect: rectSummary(fromRect),
+      toRect: rectSummary(toRect),
+      isImageLightbox,
+    });
+
+    if (isImageLightbox) {
+      const panelAnim = lightboxPanel.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: IMAGE_FADE_DURATION_MS, easing: PANEL_ANIM_EASING, fill: "forwards" },
+      );
+
+      const backdropAnim = lightboxBackdrop.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: IMAGE_FADE_DURATION_MS, easing: PANEL_ANIM_EASING, fill: "forwards" },
+      );
+
+      await Promise.all([
+        panelAnim.finished.catch(() => {}),
+        backdropAnim.finished.catch(() => {}),
+      ]);
+    } else if (tile && isRectRenderable(fromRect) && isRectRenderable(toRect)) {
+      tile.classList.add("lightboxSourceTileFading");
+      const clone = createTileClone(tile, fromRect);
+      debugLog("close: starting clone animation");
+
+      lightboxPanel.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: CLOSE_DURATION_MS, easing: PANEL_ANIM_EASING, fill: "forwards" },
+      );
+
+      const backdropAnim = lightboxBackdrop.animate(
+        [{ opacity: 1 }, { opacity: 0 }],
+        { duration: CLOSE_DURATION_MS, easing: PANEL_ANIM_EASING, fill: "forwards" },
+      );
+
+      const cloneAnim = animateCloneBetweenRects(clone, fromRect, toRect, CLOSE_DURATION_MS);
+
+      await Promise.all([
+        cloneAnim.finished.catch(() => {}),
+        backdropAnim.finished.catch(() => {}),
+      ]);
+      debugLog("close: clone animation complete");
+      clone.remove();
+    } else {
+      debugLog("close: fallback (no geometry animation)");
+    }
+
+    lightbox.hidden = true;
+    lightbox.classList.remove("isAnimating");
+    lightboxPanel.classList.remove("isVertical");
+    lightboxPanel.classList.remove("isImage");
+    lightboxPanel.style.opacity = "";
+    lightboxBackdrop.style.opacity = "";
+    clearYoutubePlayer();
+    lightboxContent.replaceChildren();
+    setLightboxDetails(null);
+    document.body.classList.remove("noScroll");
+    if (lastActiveElement && typeof lastActiveElement.focus === "function") {
+      lastActiveElement.focus();
+    }
+    if (tile) {
+      tile.classList.remove("lightboxSourceTileFading");
+    }
+    lastActiveElement = null;
+    activeTile = null;
+    isAnimating = false;
+  }
+
+  async function openLightbox(tile) {
+    if (!lightbox || !lightboxContent || !lightboxPanel || !lightboxBackdrop || !lightboxClose) {
+      return;
+    }
+    if (isAnimating || !lightbox.hidden) return;
+    const url = tile.getAttribute("href") || "";
+    const isVertical = tile.dataset.vertical === "true";
+    const tileImage = tile.querySelector("img");
+    const alt =
+      tileImage instanceof HTMLImageElement
+        ? tileImage.alt || tile.dataset.title?.trim() || "Image"
+        : tile.dataset.title?.trim() || "Image";
+    const playerConfig = buildPlayer(url, isVertical, alt);
+    if (!playerConfig) return;
+    const playerEl = playerConfig.element;
+    const shouldUseVertical = playerConfig.isVertical === true;
+    isAnimating = true;
+    lightbox.classList.add("isAnimating");
+    lightboxPanel.classList.toggle("isVertical", shouldUseVertical);
+    lightboxPanel.classList.toggle("isImage", playerConfig.kind === "image");
+
+    lastActiveElement = document.activeElement;
+    activeTile = tile;
+    const tileRect = tile.getBoundingClientRect();
+    debugLog("open: requested", {
+      tileId: tile.dataset.id || null,
+      kind: playerConfig.kind,
+      url,
+      isVertical: shouldUseVertical,
+      tileRect: rectSummary(tileRect),
+      prefersReducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    });
+
+    if (playerConfig.kind !== "youtube") {
+      playerEl.classList.add("lightboxMediaPending");
+    }
+    lightboxContent.replaceChildren(playerEl);
+    setLightboxDetails(tile);
+    lightbox.hidden = false;
+    document.body.classList.add("noScroll");
+    lightboxBackdrop.style.opacity = "0";
+    lightboxPanel.style.opacity = "0";
+    if (playerConfig.kind === "image") {
+      await waitForImageReady(playerEl);
+    }
+    await nextAnimationFrame();
+    if (playerConfig.kind === "image") {
+      const panelAnim = lightboxPanel.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: IMAGE_FADE_DURATION_MS, easing: PANEL_ANIM_EASING, fill: "forwards" },
+      );
+      const backdropAnim = lightboxBackdrop.animate(
+        [{ opacity: 0 }, { opacity: 1 }],
+        { duration: IMAGE_FADE_DURATION_MS, easing: PANEL_ANIM_EASING, fill: "forwards" },
+      );
+
+      await Promise.all([
+        panelAnim.finished.catch(() => {}),
+        backdropAnim.finished.catch(() => {}),
+      ]);
+
+      playerEl.classList.remove("lightboxMediaPending");
+      lightbox.classList.remove("isAnimating");
+      lightboxBackdrop.style.opacity = "";
+      lightboxPanel.style.opacity = "";
+      isAnimating = false;
+      lightboxClose.focus();
+      return;
+    }
+
+    const revealFallbackId = window.setTimeout(() => {
+      if (!lightbox || lightbox.hidden) return;
+      playerEl.classList.remove("lightboxMediaPending");
+      lightbox.classList.remove("isAnimating");
+      lightboxBackdrop.style.opacity = "";
+      lightboxPanel.style.opacity = "";
+      isAnimating = false;
+    }, OPEN_DURATION_MS + 160);
+
+    if (playerConfig.kind === "youtube") {
+      void mountYoutubePlayer(playerEl, playerConfig.sourceUrl);
+    }
+
+    const playerRect = playerEl.getBoundingClientRect();
+    const targetRect = playerRect;
+    const canAnimate =
+      isRectRenderable(tileRect) && isRectRenderable(targetRect);
+    debugLog("open: measured target", {
+      targetRect: rectSummary(targetRect),
+      playerRect: rectSummary(playerRect),
+      canAnimate,
+    });
+
+    if (!canAnimate) {
+      window.clearTimeout(revealFallbackId);
+      tile.classList.add("lightboxSourceTileFading");
+      playerEl.classList.remove("lightboxMediaPending");
+      lightbox.classList.remove("isAnimating");
+      lightboxBackdrop.style.opacity = "";
+      lightboxPanel.style.opacity = "";
+      isAnimating = false;
+      lightboxClose.focus();
+      debugLog("open: fallback (no geometry animation)");
+      return;
+    }
+
+    tile.classList.add("lightboxSourceTileFading");
+    const clone = createTileClone(tile, tileRect);
+    debugLog("open: starting clone animation");
+
+    const backdropAnim = lightboxBackdrop.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: OPEN_DURATION_MS, easing: PANEL_ANIM_EASING, fill: "forwards" },
+    );
+    lightboxPanel.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      {
+        duration: OPEN_DURATION_MS * 0.8,
+        delay: OPEN_DURATION_MS * 0.2,
+        easing: PANEL_ANIM_EASING,
+        fill: "forwards",
+      },
+    );
+
+    const cloneAnim = animateCloneBetweenRects(clone, tileRect, targetRect, OPEN_DURATION_MS, {
+      fromOpacity: 1,
+      toOpacity: 0,
+    });
+
+    await Promise.all([
+      cloneAnim.finished.catch(() => {}),
+      backdropAnim.finished.catch(() => {}),
+    ]);
+    debugLog("open: clone animation complete");
+    window.clearTimeout(revealFallbackId);
+
+    clone.remove();
+    playerEl.classList.remove("lightboxMediaPending");
+    lightbox.classList.remove("isAnimating");
+    lightboxBackdrop.style.opacity = "";
+    lightboxPanel.style.opacity = "";
+    isAnimating = false;
+    lightboxClose.focus();
+  }
+
+  tiles.forEach((tile) => {
+    tile.addEventListener("click", (event) => {
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const url = tile.getAttribute("href") || "";
+      const canEmbed = canBuildPlayer(url);
+      if (!canEmbed) return;
+
+      event.preventDefault();
+      void openLightbox(tile);
+    });
+  });
+
+  lightbox?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.closeLightbox !== undefined) {
+      void closeLightbox();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      void closeLightbox();
+    }
+  });
+</script>
+
+<style>
+  :global(body.noScroll) {
+    overflow: hidden;
+  }
+
+  .lightbox[hidden] {
+    display: none;
+  }
+
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+  }
+
+  .lightboxBackdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+  }
+
+  .lightboxPanel {
+    position: relative;
+    z-index: 1;
+    width: min(960px, 96vw);
+  }
+
+  .lightboxPanel.isVertical {
+    width: min(420px, calc((100vh - 140px) * 0.5625), 92vw);
+  }
+
+  .lightboxPanel.isImage {
+    width: auto;
+    max-width: 96vw;
+  }
+
+  .lightboxPanel.isImage :global(#lightboxContent) {
+    width: auto;
+  }
+
+  .lightbox.isAnimating .lightboxClose {
+    visibility: hidden;
+  }
+
+  .lightboxClose {
+    position: absolute;
+    top: -64px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.78);
+    color: white;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    z-index: 2;
+      transition: background 200ms ease;
+  }
+
+  .lightboxClose::before,
+  .lightboxClose::after {
+    content: "";
+    position: absolute;
+    width: 24px;
+    height: 2.5px;
+    background: currentColor;
+    border-radius: 999px;
+  }
+
+  .lightboxClose::before {
+    transform: rotate(45deg);
+  }
+
+  .lightboxClose::after {
+    transform: rotate(-45deg);
+  }
+
+  .lightboxClose:hover {
+    background: rgba(0, 0, 0, 0.50);
+  }
+
+  .lightboxClose:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 2px;
+  }
+
+  .srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  :global(#lightboxContent) {
+    width: 100%;
+  }
+
+  .lightboxDetails {
+    margin-top: 1rem;
+    padding: 0 0.25rem;
+    color: white;
+    text-align: center;
+    text-shadow: 2px 2px 1px black;
+  }
+
+  .lightboxTitle,
+  .lightboxSubtitle,
+  .lightboxRoles,
+  .lightboxCopy {
+    margin: 0;
+  }
+
+  .lightboxTitle {
+    font-size: clamp(2.4rem, 4vw, 3.6rem);
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .lightboxSubtitle,
+  .lightboxRoles {
+    margin-top: 0.4rem;
+    opacity: 0.9;
+  }
+
+  .lightboxSubtitle {
+    font-weight: 600;
+  }
+
+  .lightboxCopy {
+    max-width: 72ch;
+    margin: 0.85rem auto 0;
+    line-height: 1.45;
+    opacity: 0.95;
+  }
+
+  :global(.lightboxMedia) {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    border-radius: 12px;
+    background: black;
+  }
+
+  :global(.lightboxMedia.isVertical) {
+    aspect-ratio: 9 / 16;
+  }
+
+  :global(.lightboxMedia.lightboxImage) {
+    display: block;
+    width: auto;
+    max-width: min(96vw, 1200px);
+    max-height: min(82vh, 900px);
+    aspect-ratio: auto;
+    object-fit: contain;
+    background: transparent;
+  }
+
+  :global(.lightboxErrorCard) {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 0.9rem;
+    padding: 1.25rem;
+    text-align: center;
+    color: white;
+    background: #0d0d0d;
+  }
+
+  :global(.lightboxErrorText) {
+    margin: 0;
+    max-width: 36ch;
+    line-height: 1.45;
+  }
+
+  :global(.lightboxErrorLink) {
+    color: #9fd8ff;
+    text-decoration: underline;
+    font-weight: 600;
+  }
+
+  :global(.lightboxErrorLink:hover) {
+    color: #c6e9ff;
+  }
+
+  :global(.lightboxErrorLink:focus-visible) {
+    outline: 2px solid white;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  :global(.lightboxMediaPending) {
+    opacity: 0;
+  }
+
+  :global(.lightboxClone) {
+    position: fixed;
+    z-index: 1001;
+    margin: 0;
+    pointer-events: none;
+    overflow: hidden;
+    will-change: transform;
+  }
+
+  :global(.lightboxSourceTileFading) {
+    opacity: 0;
+    transition: opacity 220ms ease;
+  }
+</style>

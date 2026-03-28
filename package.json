@@ -1,5 +1,5 @@
 {
-	"name": "instant-magenta",
+	"name": "astro-blog-starter-andyzou",
 	"description": "Build a personal website, blog, or portfolio with Astro.",
 	"cloudflare": {
 		"label": "Astro Framework Starter",
@@ -16,7 +16,9 @@
 		"@astrojs/mdx": "4.3.12",
 		"@astrojs/rss": "4.0.14",
 		"@astrojs/sitemap": "3.6.0",
+		"@tailwindcss/vite": "^4.2.1",
 		"astro": "5.16.2",
+		"tailwindcss": "^4.2.1",
 		"typescript": "5.9.3"
 	},
 	"devDependencies": {
@@ -30,7 +32,12 @@
 		"check": "astro build && tsc && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy",
 		"dev": "astro dev",
-		"preview": "astro build && wrangler dev"
+		"import:medium": "node scripts/import-medium.mjs",
+		"gen:cases": "node scripts/gen-cases.mjs",
+		"gen:all": "npm run gen:cases && npx tsc --noEmit",
+		"preview": "astro build && wrangler dev",
+		"seo:check": "node scripts/seo-check.mjs"
 	},
-	"type": "module"
+	"type": "module",
+	"packageManager": "pnpm@10.21.0+sha512.da3337267e400fdd3d479a6c68079ac6db01d8ca4f67572083e722775a796788a7a9956613749e000fac20d424b594f7a791a5f4e2e13581c5ef947f26968a40"
 }

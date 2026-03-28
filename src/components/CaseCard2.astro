@@ -1,0 +1,81 @@
+---
+import { Image } from 'astro:assets';
+
+interface Props {
+  title?: string;
+  copy?: string;
+  imageSrc?: ImageMetadata;
+  imageAlt?: string;
+  className?: string;
+}
+
+const {
+  title,
+  copy,
+  imageSrc,
+  imageAlt,
+  className,
+} = Astro.props;
+---
+
+<article id={title} class={`relative overflow-hidden ${className ?? ''}`}>
+
+  <slot name="background" />
+  {imageSrc ? (
+    <Image
+      src={imageSrc}
+      alt={imageAlt}
+      width={640}
+      class="w-full h-full object-cover object-top"
+    />
+  ) : null}
+
+  <div class="card">
+    <h3 class="text-center font-bold">
+      <slot name="title">{title}</slot>
+    </h3>
+    <div class="reveal">
+      <p class="text-center md:px-24">
+        <slot name="copy">{copy}</slot>
+      </p>
+    </div>
+  </div>
+</article>
+
+<style>
+  .card {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: white;
+    z-index: 10;
+    opacity: 0%;
+    transition: opacity 300ms ease;
+  }
+
+  .card:hover {
+    opacity: 100%;
+    background-color: rgba(0, 0, 0, 0.75);
+  }
+
+
+
+  .reveal {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 400ms ease;
+  }
+
+  .reveal > p {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .card:hover .reveal {
+    grid-template-rows: 1fr;
+  }
+</style>

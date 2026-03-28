@@ -1,50 +1,226 @@
 ---
-import BaseHead from '../components/BaseHead.astro';
-import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
-import { SITE_TITLE, SITE_DESCRIPTION } from '../consts';
+import BaseHead from "../components/BaseHead.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import VideoLightbox from "../components/VideoLightbox.astro";
+import WorkTile from "../components/WorkTile.astro";
+import WorkTilebyId from "../components/WorkTileByID.astro";
+import WorkTilesBySeries from "../components/WorkTilesBySeries.astro";
+import { SITE_DESCRIPTION, SITE_TITLE } from "../consts";
+import azaleaShoot from "../images/AzaleaShootSelects-07.jpg";
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+import { getCollection } from "astro:content";
+import {
+  buildOrganizationJsonLd,
+  buildPersonJsonLd,
+  buildWebSiteJsonLd,
+  summarizeText,
+} from "../lib/seo";
+
+function formatGalleryAlt(filePath: string) {
+  const filename =
+    filePath
+      .split("/")
+      .pop()
+      ?.replace(/\.[^.]+$/, "") ?? "Andy photo";
+
+  return filename.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const andyGalleryImages = Object.entries(
+  import.meta.glob<{ default: ImageMetadata }>(
+    "../images/andy/*.{jpg,jpeg,png,webp,avif}",
+    { eager: true },
+  ),
+)
+  .map(([filePath, module]) => ({
+    alt: formatGalleryAlt(filePath),
+    src: module.default,
+  }))
+  .sort((a, b) =>
+    a.alt.localeCompare(b.alt, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+
+const blogDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+const latestBlogPosts = (await getCollection("blog"))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+  .slice(0, 3)
+  .map((post) => ({
+    id: `blog-${post.id}`,
+    title: post.data.title,
+    subtitle: blogDateFormatter.format(post.data.pubDate),
+    copy: post.data.description,
+    href: `/blog/${post.id}/`,
+    media: {
+      kind: "image" as const,
+      src: post.data.heroImage ?? "/blog-placeholder-1.jpg",
+      alt: post.data.title,
+    },
+  }));
+
+const pageDescription = summarizeText(
+  "Instant Magenta is the creative production studio of Andy Zou, making comedy, branded content, editorial work, and experimental digital media for entertainment and culture.",
+);
+const jsonLd = Astro.site
+  ? [
+      buildWebSiteJsonLd(Astro.site),
+      buildOrganizationJsonLd(Astro.site),
+      buildPersonJsonLd(Astro.site),
+    ]
+  : [];
 ---
 
 <!doctype html>
 <html lang="en">
-	<head>
-		<BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
-	</head>
-	<body>
-		<Header />
-		<main>
-			<h1>🧑‍🚀 Hello, Astronaut!</h1>
-			<p>
-				Welcome to the official <a href="https://astro.build/">Astro</a> blog starter template. This
-				template serves as a lightweight, minimally-styled starting point for anyone looking to build
-				a personal website, blog, or portfolio with Astro.
-			</p>
-			<p>
-				This template comes with a few integrations already configured in your
-				<code>astro.config.mjs</code> file. You can customize your setup with
-				<a href="https://astro.build/integrations">Astro Integrations</a> to add tools like Tailwind,
-				React, or Vue to your project.
-			</p>
-			<p>Here are a few ideas on how to get started with the template:</p>
-			<ul>
-				<li>Edit this page in <code>src/pages/index.astro</code></li>
-				<li>Edit the site header items in <code>src/components/Header.astro</code></li>
-				<li>Add your name to the footer in <code>src/components/Footer.astro</code></li>
-				<li>Check out the included blog posts in <code>src/content/blog/</code></li>
-				<li>Customize the blog post page layout in <code>src/layouts/BlogPost.astro</code></li>
-			</ul>
-			<p>
-				Have fun! If you get stuck, remember to <a href="https://docs.astro.build/"
-					>read the docs
-				</a> or <a href="https://astro.build/chat">join us on Discord</a> to ask questions.
-			</p>
-			<p>
-				Looking for a blog template with a bit more personality? Check out <a
-					href="https://github.com/Charca/astro-blog-template"
-					>astro-blog-template
-				</a> by <a href="https://twitter.com/Charca">Maxi Ferreira</a>.
-			</p>
-		</main>
-		<Footer />
-	</body>
+  <head>
+    <BaseHead
+      title={SITE_TITLE}
+      description={pageDescription || SITE_DESCRIPTION}
+      image={azaleaShoot.src}
+      imageAlt="Portrait of Andy Zou for Instant Magenta"
+      jsonLd={jsonLd}
+    />
+  </head>
+  <body>
+    <main class="text-center">
+      <Header />
+      <p class="copy md:px-36">
+        Instant Magenta is the production arm of NYC-based director and former Comedy Central Digital producer <a href="https://www.andyzou.com" target="_blank" rel="noopener noreferrer" class="underline">Andy Zou</a>. Get in touch
+        with Andy at <span id="contact-email">[enable JavaScript to view email]</span> for creative video production
+        services from full-service creative to editing.
+      </p>
+      <VideoLightbox tileSelector="[data-lightboxable='true']" />
+      <details open >
+        <summary
+          ><h2 class="section-title bigtitle">Death Becomes Her</h2></summary
+        >
+        <ol class="tilescontainer">
+          <WorkTilesBySeries seriesId="death-becomes-her" />
+        </ol>
+      </details>
+      <details open >
+        <summary
+          ><h2 class="section-title bigtitle">
+            Armada Projects / Sony / Paramount
+          </h2></summary
+        >
+        <ol class="tilescontainer">
+          <WorkTilesBySeries seriesId="armada" />
+        </ol>
+      </details>
+      <details open >
+        <summary
+          ><h2 class="section-title bigtitle">Barstool Sports</h2></summary
+        >
+        <ol class="tilescontainer">
+          <WorkTilesBySeries seriesId="barstool" />
+        </ol>
+      </details>
+      <details open >
+        <summary
+          ><h2 class="section-title bigtitle">Westbrook Studios</h2></summary
+        >
+        <ol class="tilescontainer two-col">
+          <WorkTilesBySeries seriesId="westbrook" />
+        </ol>
+      </details>
+      
+    </main>
+    <script>
+      import { initIndexPage } from "../scripts/indexPage";
+
+      initIndexPage();
+
+      const contactEmail = document.querySelector("#contact-email");
+
+      if (contactEmail) {
+        const user = ["Andy"].join("");
+        const domain = ["com", "AndyZou"].reverse().join(".");
+        const email = `${user}@${domain}`;
+        const link = document.createElement("a");
+
+        link.href = `mailto:${email}`;
+        link.textContent = email;
+        link.className = "underline";
+
+        contactEmail.replaceWith(link);
+      }
+    </script>
+  </body><Footer />
+
+  <style>
+    :root {
+      interpolate-size: allow-keywords;
+    }
+
+    details {
+      position: relative;
+      overflow: hidden;
+    }
+
+    details::after {
+      position: absolute;
+      content: "";
+      inset: 0;
+      pointer-events: none;
+    }
+
+    details::details-content {
+      block-size: 0;
+      transition:
+        block-size 0.5s,
+        content-visibility 0.5s;
+      transition-behavior: allow-discrete;
+    }
+
+    details:open::details-content {
+      block-size: auto;
+    }
+
+    summary {
+      list-style: none;
+    }
+
+    .section-title:hover {
+      background-color: rgb(var(--gray-light));
+      color: rgb(var(--black));
+    }
+
+    .section-title:hover .header-video {
+      display: none;
+    }
+    /* 
+    .subsection {
+      width: fit-content;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 768px) {
+      .subsection {
+        font-size: 1.75em;
+      }
+    }
+      */
+
+    .gallery-lightbox {
+      display: block;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    @media (min-width: 768px) {
+      .tilescontainer.two-col {
+        grid-template-columns: repeat(2, minmax(320px, 1fr));
+      }
+    }
+  </style>
 </html>

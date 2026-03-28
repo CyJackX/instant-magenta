@@ -12,5 +12,6 @@ export async function GET(context) {
 			...post.data,
 			link: `/blog/${post.id}/`,
 		})),
+		customData: `<language>en-us</language>`,
 	});
 }

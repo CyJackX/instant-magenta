@@ -1,0 +1,67 @@
+---
+import { Image } from "astro:assets";
+interface Props {
+  id: string;
+  title?: string;
+  imageSrc?: ImageMetadata | string;
+  imageAlt?: string;
+  videoSrc?: string;
+  reverse?: boolean;
+}
+
+const {
+  id,
+  title,
+  imageSrc,
+  imageAlt,
+  videoSrc,
+  reverse = false,
+} = Astro.props;
+---
+
+<details class="border-white border-0 rounded-lg m-4 p-4" open>
+  <summary
+    id={id}
+    class={`hover: cursor-pointer case-card flex gap-4 md:gap-8 flex-col my-8 ${reverse ? "md:flex-row-reverse" : "md:flex-row"}`}
+  >
+    <div class="flex-1 flex-col justify-end my-auto">
+      <h3 class="text-center font-bold">{title}</h3>
+      <p class="text-center hidden md:px-24 md:block">
+        <slot />
+      </p>
+    </div>
+    {
+      videoSrc ? (
+        <video
+          src={videoSrc}
+          class="card-hero flex-1 min-w-0 w-full h-auto object-cover self-center aspect-video object-top"
+          autoplay
+          loop
+          muted
+          playsinline
+        />
+      ) : (
+        imageSrc &&
+        (typeof imageSrc === "string" ? (
+          <img
+            src={imageSrc}
+            alt={imageAlt ?? ""}
+            width="640"
+            height="360"
+            loading="lazy"
+            decoding="async"
+            class="card-hero flex-1 min-w-0 w-full h-auto object-cover self-center aspect-video object-top"
+          />
+        ) : (
+          <Image
+            src={imageSrc}
+            alt={imageAlt ?? ""}
+            width={640}
+            class="card-hero flex-1 min-w-0 w-full h-auto object-cover self-center aspect-video object-top"
+          />
+        ))
+      )
+    }
+  </summary>
+  <slot />
+</details>
