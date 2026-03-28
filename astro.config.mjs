@@ -1,6 +1,5 @@
 // @ts-check
 import { defineConfig } from "astro/config";
-import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
 
 import cloudflare from "@astrojs/cloudflare";
@@ -10,12 +9,7 @@ import { SITE_URL } from "./site.config.js";
 // https://astro.build/config
 export default defineConfig({
 	site: SITE_URL,
-	integrations: [
-		mdx(),
-		sitemap({
-			filter: (page) => !page.endsWith("/about/"),
-		}),
-	],
+	integrations: [sitemap()],
 	adapter: cloudflare({
 		platformProxy: {
 			enabled: true,

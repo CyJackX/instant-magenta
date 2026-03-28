@@ -3,14 +3,8 @@ import BaseHead from "../components/BaseHead.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import VideoLightbox from "../components/VideoLightbox.astro";
-import WorkTile from "../components/WorkTile.astro";
-import WorkTilebyId from "../components/WorkTileByID.astro";
 import WorkTilesBySeries from "../components/WorkTilesBySeries.astro";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../consts";
-import azaleaShoot from "../images/AzaleaShootSelects-07.jpg";
-import { Image } from "astro:assets";
-import type { ImageMetadata } from "astro";
-import { getCollection } from "astro:content";
 import {
   buildOrganizationJsonLd,
   buildPersonJsonLd,
@@ -18,55 +12,7 @@ import {
   summarizeText,
 } from "../lib/seo";
 
-function formatGalleryAlt(filePath: string) {
-  const filename =
-    filePath
-      .split("/")
-      .pop()
-      ?.replace(/\.[^.]+$/, "") ?? "Andy photo";
-
-  return filename.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-const andyGalleryImages = Object.entries(
-  import.meta.glob<{ default: ImageMetadata }>(
-    "../images/andy/*.{jpg,jpeg,png,webp,avif}",
-    { eager: true },
-  ),
-)
-  .map(([filePath, module]) => ({
-    alt: formatGalleryAlt(filePath),
-    src: module.default,
-  }))
-  .sort((a, b) =>
-    a.alt.localeCompare(b.alt, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    }),
-  );
-
-const blogDateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
-const latestBlogPosts = (await getCollection("blog"))
-  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
-  .slice(0, 3)
-  .map((post) => ({
-    id: `blog-${post.id}`,
-    title: post.data.title,
-    subtitle: blogDateFormatter.format(post.data.pubDate),
-    copy: post.data.description,
-    href: `/blog/${post.id}/`,
-    media: {
-      kind: "image" as const,
-      src: post.data.heroImage ?? "/blog-placeholder-1.jpg",
-      alt: post.data.title,
-    },
-  }));
-
+const pageTitle = `${SITE_TITLE} | Creative Production Studio`;
 const pageDescription = summarizeText(
   "Instant Magenta is the creative production studio of Andy Zou, making comedy, branded content, editorial work, and experimental digital media for entertainment and culture.",
 );
@@ -83,10 +29,10 @@ const jsonLd = Astro.site
 <html lang="en">
   <head>
     <BaseHead
-      title={SITE_TITLE}
+      title={pageTitle}
       description={pageDescription || SITE_DESCRIPTION}
-      image={azaleaShoot.src}
-      imageAlt="Portrait of Andy Zou for Instant Magenta"
+      image="/InstantMagentaLogo white.png"
+      imageAlt="Instant Magenta logo"
       jsonLd={jsonLd}
     />
   </head>
