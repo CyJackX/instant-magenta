@@ -1560,5 +1560,50 @@ export const CASES: Case[] = [
     "youtubeId": "_daCOmHG9Ew",
     "href": "https://www.youtube.com/watch?v=_daCOmHG9Ew",
     "videoOrder": 6
+  },
+  {
+    "id": "archpaper-1",
+    "media": {
+      "kind": "image",
+      "src": "/thumbposters/bMMi2qBEVlc-hqdefault.jpg",
+      "alt": "Barclays Center Green Roof thumbnail"
+    },
+    "title": "Barclays Center Green Roof",
+    "subtitle": "Architect's Newspaper",
+    "roles": "DP | Editor",
+    "youtubeId": "bMMi2qBEVlc",
+    "href": "https://www.youtube.com/watch?v=bMMi2qBEVlc",
+    "seriesId": "archpaper",
+    "videoOrder": 1
+  },
+  {
+    "id": "archpaper-2",
+    "media": {
+      "kind": "image",
+      "src": "/thumbposters/THuN-fAXkSI-hqdefault.jpg",
+      "alt": "Richard Meier Model Museum thumbnail"
+    },
+    "title": "Richard Meier Model Museum",
+    "subtitle": "Architect's Newspaper",
+    "roles": "DP | Editor",
+    "youtubeId": "THuN-fAXkSI",
+    "href": "https://www.youtube.com/watch?v=THuN-fAXkSI",
+    "seriesId": "archpaper",
+    "videoOrder": 2
+  },
+  {
+    "id": "archpaper-3",
+    "media": {
+      "kind": "image",
+      "src": "/thumbposters/_tz2K5f24ds-hqdefault.jpg",
+      "alt": "The Beekman Construction thumbnail"
+    },
+    "title": "The Beekman Construction",
+    "subtitle": "Architect's Newspaper",
+    "roles": "DP | Editor",
+    "youtubeId": "_tz2K5f24ds",
+    "href": "https://www.youtube.com/watch?v=_tz2K5f24ds",
+    "seriesId": "archpaper",
+    "videoOrder": 3
   }
 ];

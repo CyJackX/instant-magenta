@@ -4,6 +4,7 @@ import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import VideoLightbox from "../components/VideoLightbox.astro";
 import WorkTilesBySeries from "../components/WorkTilesBySeries.astro";
+import WorkTileById from "../components/WorkTileByID.astro";
 import { SITE_DESCRIPTION, SITE_TITLE } from "../consts";
 import {
   buildOrganizationJsonLd,
@@ -76,6 +77,24 @@ const jsonLd = Astro.site
         >
         <ol class="tilescontainer two-col">
           <WorkTilesBySeries seriesId="westbrook" />
+        </ol>
+      </details>
+      <details open >
+        <summary
+          ><h2 class="section-title bigtitle">Other Branded Content</h2></summary
+        >
+        <ol class="tilescontainer">
+          <WorkTileById id="Looking-like-a-snack" /> 
+          <WorkTileById id="election-science-duvergers-law" /> 
+          <WorkTileById id="garden-of-eden" /> 
+        </ol>
+      </details>
+      <details open >
+        <summary
+          ><h2 class="section-title bigtitle">Architect's Newspaper</h2></summary
+        >
+        <ol class="tilescontainer">
+          <WorkTilesBySeries seriesId="archpaper" />
         </ol>
       </details>
       
