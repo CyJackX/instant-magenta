@@ -1,7 +1,7 @@
 export const SITE_URL = "https://www.instantmagenta.com";
 export const SITE_TITLE = "Instant Magenta";
 export const SITE_DESCRIPTION =
-  "Instant Magenta is the creative production studio of director and creative technologist Andy Zou, making comedy, branded content, and experimental digital media.";
+  "Instant Magenta is the creative production company of director and creative technologist Andy Zou, making comedy, branded content, and experimental digital media.";
 export const SITE_AUTHOR_NAME = "Andy Zou";
 export const SITE_DEFAULT_OG_IMAGE = "/InstantMagentaLogo white.png";
 export const SITE_SOCIAL_PROFILES = [
