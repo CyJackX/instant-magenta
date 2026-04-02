@@ -39,13 +39,13 @@ const jsonLd = Astro.site
   <body>
     <main class="text-center">
       <Header />
-      <p class="copy md:px-36">
+      <p id="contact" class="copy md:px-36">
         Instant Magenta is the production arm of NYC-based director and former Comedy Central Digital producer <a href="https://www.andyzou.com" target="_blank" rel="noopener noreferrer" class="underline">Andy Zou</a>. Get in touch
         with Andy at <span id="contact-email">[enable JavaScript to view email]</span> for creative video production
         services from full-service creative to editing.
       </p>
       <VideoLightbox tileSelector="[data-lightboxable='true']" />
-      <details open >
+      <details id="death-becomes-her" open >
         <summary
           ><h2 class="section-title bigtitle">Death Becomes Her</h2></summary
         >
@@ -53,7 +53,7 @@ const jsonLd = Astro.site
           <WorkTilesBySeries seriesId="death-becomes-her" />
         </ol>
       </details>
-      <details open >
+      <details id="armada-projects" open >
         <summary
           ><h2 class="section-title bigtitle">
             Armada Projects / Sony / Paramount
@@ -63,7 +63,7 @@ const jsonLd = Astro.site
           <WorkTilesBySeries seriesId="armada" />
         </ol>
       </details>
-      <details open >
+      <details id="barstool-sports" open >
         <summary
           ><h2 class="section-title bigtitle">Barstool Sports</h2></summary
         >
@@ -71,7 +71,7 @@ const jsonLd = Astro.site
           <WorkTilesBySeries seriesId="barstool" />
         </ol>
       </details>
-      <details open >
+      <details id="westbrook-studios" open >
         <summary
           ><h2 class="section-title bigtitle">Westbrook Studios</h2></summary
         >
@@ -79,7 +79,7 @@ const jsonLd = Astro.site
           <WorkTilesBySeries seriesId="westbrook" />
         </ol>
       </details>
-      <details open >
+      <details id="other-branded-content" open >
         <summary
           ><h2 class="section-title bigtitle">Other Branded Content</h2></summary
         >
@@ -89,7 +89,7 @@ const jsonLd = Astro.site
           <WorkTileById id="garden-of-eden" /> 
         </ol>
       </details>
-      <details open >
+      <details id="architects-newspaper" open >
         <summary
           ><h2 class="section-title bigtitle">Architect's Newspaper</h2></summary
         >
@@ -124,6 +124,10 @@ const jsonLd = Astro.site
   <style>
     :root {
       interpolate-size: allow-keywords;
+    }
+
+    [id] {
+      scroll-margin-top: 1rem;
     }
 
     details {

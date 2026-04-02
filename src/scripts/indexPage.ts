@@ -6,6 +6,7 @@ const SUMMARY_SCROLL_CHASE_MS = 600;
 
 const pendingVideoHydration = new WeakMap<HTMLDetailsElement, number>();
 const activeSummaryChase = new WeakMap<HTMLDetailsElement, number>();
+let pendingHashScrollFrame = 0;
 
 function getHtmlDetailSections(): HTMLDetailsElement[] {
   return detailSections.filter(
@@ -13,17 +14,47 @@ function getHtmlDetailSections(): HTMLDetailsElement[] {
   );
 }
 
+function getHashTargetId(): string | undefined {
+  const rawTargetId = window.location.hash.slice(1);
+  if (!rawTargetId) return undefined;
+
+  try {
+    return decodeURIComponent(rawTargetId);
+  } catch {
+    return rawTargetId;
+  }
+}
+
+function getHashTargetElement(): HTMLElement | undefined {
+  const targetId = getHashTargetId();
+  if (!targetId) return undefined;
+
+  const hashTarget = document.getElementById(targetId);
+  return hashTarget instanceof HTMLElement ? hashTarget : undefined;
+}
+
 function getHashTargetDetail(
   htmlDetailSections: HTMLDetailsElement[],
 ): HTMLDetailsElement | undefined {
-  const targetId = window.location.hash.slice(1);
-  if (!targetId) return undefined;
+  const hashTarget = getHashTargetElement();
+  if (!hashTarget) return undefined;
 
-  return htmlDetailSections.find((detail) => detail.id === targetId);
+  const targetDetail =
+    hashTarget instanceof HTMLDetailsElement
+      ? hashTarget
+      : hashTarget.closest("details");
+
+  return targetDetail instanceof HTMLDetailsElement &&
+    htmlDetailSections.includes(targetDetail)
+    ? targetDetail
+    : undefined;
 }
 
 function syncHashToDetail(detail: HTMLDetailsElement) {
   if (!detail.id) return;
+
+  const hashTarget = getHashTargetElement();
+  if (hashTarget && hashTarget !== detail && detail.contains(hashTarget)) return;
 
   const nextHash = `#${detail.id}`;
   if (window.location.hash === nextHash) return;
@@ -121,6 +152,19 @@ function stopSummaryChase(detail: HTMLDetailsElement) {
   activeSummaryChase.delete(detail);
 }
 
+function scheduleHashTargetScroll(target: HTMLElement) {
+  if (pendingHashScrollFrame) {
+    window.cancelAnimationFrame(pendingHashScrollFrame);
+  }
+
+  pendingHashScrollFrame = window.requestAnimationFrame(() => {
+    pendingHashScrollFrame = window.requestAnimationFrame(() => {
+      pendingHashScrollFrame = 0;
+      target.scrollIntoView({ block: "start", inline: "nearest" });
+    });
+  });
+}
+
 function chaseSummary(detail: HTMLDetailsElement, summary: HTMLElement) {
   stopSummaryChase(detail);
 
@@ -153,6 +197,7 @@ function chaseSummary(detail: HTMLDetailsElement, summary: HTMLElement) {
 
 export function initIndexPage() {
   const htmlDetailSections = getHtmlDetailSections();
+  const initialHashTargetElement = getHashTargetElement();
   const initialHashTarget = getHashTargetDetail(htmlDetailSections);
 
   const initiallyOpenedDetail = syncOpenDetailWithHash({
@@ -190,11 +235,23 @@ export function initIndexPage() {
       if (!(summary instanceof HTMLElement)) return;
       if (detail === suppressInitialSummaryChase) return;
 
+      const hashTarget = getHashTargetElement();
+      if (hashTarget && detail.contains(hashTarget)) return;
+
       chaseSummary(detail, summary);
     });
   });
 
+  if (initialHashTargetElement) {
+    scheduleHashTargetScroll(initialHashTargetElement);
+  }
+
   window.addEventListener("hashchange", () => {
     syncOpenDetailWithHash({ htmlDetailSections, allowFallback: false });
+
+    const hashTarget = getHashTargetElement();
+    if (hashTarget) {
+      scheduleHashTargetScroll(hashTarget);
+    }
   });
 }
