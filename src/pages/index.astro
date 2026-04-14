@@ -40,8 +40,8 @@ const jsonLd = Astro.site
     <main class="text-center">
       <Header />
       <p id="contact" class="copy md:px-36">
-        Instant Magenta is the production arm of NYC-based director and former Comedy Central Digital producer <a href="https://www.andyzou.com" target="_blank" rel="noopener noreferrer" class="underline">Andy Zou</a>. Get in touch
-        with Andy at <span id="contact-email">[enable JavaScript to view email]</span> for creative video production
+        Instant Magenta is the production arm of NYC-based directors & producers <a href="https://www.andyzou.com" target="_blank" rel="noopener noreferrer" class="underline">Andy Zou</a> and <a href="https://www.katiesicking.com" target="_blank" rel="noopener noreferrer" class="underline">Katie Sicking</a>. <br/>Get in touch
+        at <span id="contact-email">[enable JavaScript to view email]</span> for creative video production
         services from full-service creative to editing.
       </p>
       <VideoLightbox tileSelector="[data-lightboxable='true']" />
@@ -89,6 +89,14 @@ const jsonLd = Astro.site
           <WorkTileById id="garden-of-eden" /> 
         </ol>
       </details>
+      <details id="other-branded-content" open >
+        <summary
+          ><h2 class="section-title bigtitle">Shorts</h2></summary
+        >
+        <ol class="tilescontainer">
+          <WorkTilesBySeries seriesId="shorts"/> 
+        </ol>
+      </details>
       <details id="architects-newspaper" open >
         <summary
           ><h2 class="section-title bigtitle">Architect's Newspaper</h2></summary
@@ -107,8 +115,8 @@ const jsonLd = Astro.site
       const contactEmail = document.querySelector("#contact-email");
 
       if (contactEmail) {
-        const user = ["Andy"].join("");
-        const domain = ["com", "AndyZou"].reverse().join(".");
+        const user = ["Info"].join("");
+        const domain = ["com", "InstantMagenta"].reverse().join(".");
         const email = `${user}@${domain}`;
         const link = document.createElement("a");
 
